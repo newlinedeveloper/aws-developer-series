@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -21,14 +21,19 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	}
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
-	// Create lambda function
-	awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
-		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
-		Runtime:      awslambda.Runtime_PROVIDED_AL2(),
-		MemorySize:   jsii.Number(config.MemorySize),
-		Timeout:      awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)),
-		Code:         awslambda.AssetCode_FromAsset(jsii.String(config.CodePath), nil),
-		Handler:      jsii.String(config.Handler),
+	// Define the DynamoDB table
+	awsdynamodb.NewTable(stack, jsii.String(config.TableName), &awsdynamodb.TableProps{
+		TableName: jsii.String(config.TableName),
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String(config.PartitionKey),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		SortKey: &awsdynamodb.Attribute{
+			Name: jsii.String(config.SortKey),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
 	return stack
