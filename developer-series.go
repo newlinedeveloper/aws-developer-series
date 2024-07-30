@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigateway"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -22,13 +23,33 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
 	// Create lambda function
-	awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
+	lambdaHandler := awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
 		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
 		Runtime:      awslambda.Runtime_PROVIDED_AL2(),
 		MemorySize:   jsii.Number(config.MemorySize),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)),
 		Code:         awslambda.AssetCode_FromAsset(jsii.String(config.CodePath), nil),
 		Handler:      jsii.String(config.Handler),
+	})
+
+	// Create API Gateway rest api.
+	restApi := awsapigateway.NewRestApi(stack, jsii.String("LambdaRestApi"), &awsapigateway.RestApiProps{
+		RestApiName:        jsii.String(*stack.StackName() + "-LambdaRestApi"),
+		RetainDeployments:  jsii.Bool(false),
+		EndpointExportName: jsii.String("RestApiUrl"),
+		Deploy:             jsii.Bool(true),
+		DeployOptions: &awsapigateway.StageOptions{
+			StageName:           jsii.String("dev"),
+			CacheClusterEnabled: jsii.Bool(true),
+			CacheClusterSize:    jsii.String("0.5"),
+			CacheTtl:            awscdk.Duration_Minutes(jsii.Number(1)),
+		},
+	})
+
+	// Add path resources to rest api
+	devAPIRes := restApi.Root().AddResource(jsii.String("developer-series"), nil)
+	devAPIRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(lambdaHandler, nil), &awsapigateway.MethodOptions{
+		ApiKeyRequired: jsii.Bool(false),
 	})
 
 	return stack

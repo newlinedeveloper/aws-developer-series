@@ -3,16 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
-type MyEvent struct {
-	Name string `json:"name"`
-}
+func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
-func HandleRequest(ctx context.Context, event MyEvent) (string, error) {
-	return fmt.Sprintf("Welcome to AWS Developer series %s!", event.Name), nil
+	name := request.QueryStringParameters["name"]
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       fmt.Sprintf("Welcome to AWS Developer Series %s!", name),
+	}, nil
 }
 
 func main() {
