@@ -34,21 +34,13 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 
 	// Create API Gateway rest api.
 	restApi := awsapigateway.NewRestApi(stack, jsii.String("LambdaRestApi"), &awsapigateway.RestApiProps{
-		RestApiName:        jsii.String(*stack.StackName() + "-LambdaRestApi"),
-		RetainDeployments:  jsii.Bool(false),
-		EndpointExportName: jsii.String("RestApiUrl"),
-		Deploy:             jsii.Bool(true),
-		DeployOptions: &awsapigateway.StageOptions{
-			StageName:           jsii.String("dev"),
-			CacheClusterEnabled: jsii.Bool(true),
-			CacheClusterSize:    jsii.String("0.5"),
-			CacheTtl:            awscdk.Duration_Minutes(jsii.Number(1)),
-		},
+		RestApiName: jsii.String(*stack.StackName() + "-LambdaRestApi"),
+		Description: jsii.String("AWS Developer Series REST API"),
 	})
 
 	// Add path resources to rest api
-	devAPIRes := restApi.Root().AddResource(jsii.String("developer-series"), nil)
-	devAPIRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(lambdaHandler, nil), &awsapigateway.MethodOptions{
+	devApiRes := restApi.Root().AddResource(jsii.String("developer-series"), nil)
+	devApiRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(lambdaHandler, nil), &awsapigateway.MethodOptions{
 		ApiKeyRequired: jsii.Bool(false),
 	})
 
