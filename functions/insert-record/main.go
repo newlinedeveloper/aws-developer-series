@@ -4,44 +4,47 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/jsii-runtime-go"
 )
 
-func main() {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+type Request struct {
+	OrderID       string `json:"order_id"`
+	OrderDateTime string `json:"order_datetime"`
+	Product       string `json:"product"`
+	Quantity      string `json:"quantity"`
+}
+
+func HandleRequest(ctx context.Context, req Request) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("unable to load SDK config, %v", err)
 	}
 
 	svc := dynamodb.NewFromConfig(cfg)
 
-	items := []map[string]types.AttributeValue{
-		{
-			"OrderID":       &types.AttributeValueMemberS{Value: "1"},
-			"OrderDateTime": &types.AttributeValueMemberS{Value: "2024-07-30T12:00:00Z"},
-			"Product":       &types.AttributeValueMemberS{Value: "Laptop"},
-			"Quantity":      &types.AttributeValueMemberN{Value: "2"},
-		},
-		{
-			"OrderID":       &types.AttributeValueMemberS{Value: "2"},
-			"OrderDateTime": &types.AttributeValueMemberS{Value: "2024-07-30T13:00:00Z"},
-			"Product":       &types.AttributeValueMemberS{Value: "Phone"},
-			"Quantity":      &types.AttributeValueMemberN{Value: "5"},
-		},
+	item := map[string]types.AttributeValue{
+		"OrderID":       &types.AttributeValueMemberS{Value: req.OrderID},
+		"OrderDateTime": &types.AttributeValueMemberS{Value: req.OrderDateTime},
+		"Product":       &types.AttributeValueMemberS{Value: req.Product},
+		"Quantity":      &types.AttributeValueMemberN{Value: req.Quantity},
 	}
 
-	for _, item := range items {
-		_, err := svc.PutItem(context.TODO(), &dynamodb.PutItemInput{
-			TableName: jsii.String("OrdersTable"),
-			Item:      item,
-		})
-		if err != nil {
-			fmt.Printf("Failed to insert item: %v\n", err)
-		} else {
-			fmt.Println("Successfully inserted item")
-		}
+	_, err = svc.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: jsii.String("OrdersTable"),
+		Item:      item,
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to insert item: %v", err)
 	}
+
+	return "Successfully inserted item", nil
+}
+
+func main() {
+	lambda.Start(HandleRequest)
 }

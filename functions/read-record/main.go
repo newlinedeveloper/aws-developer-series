@@ -4,16 +4,22 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/jsii-runtime-go"
 )
 
-func main() {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+type MyEvent struct {
+	OrderID       string `json:"order_id"`
+	OrderDateTime string `json:"order_date_time"`
+}
+
+func handler(ctx context.Context, event MyEvent) (map[string]types.AttributeValue, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
 	svc := dynamodb.NewFromConfig(cfg)
@@ -21,16 +27,19 @@ func main() {
 	input := &dynamodb.GetItemInput{
 		TableName: jsii.String("OrdersTable"),
 		Key: map[string]types.AttributeValue{
-			"OrderID":       &types.AttributeValueMemberS{Value: "1"},
-			"OrderDateTime": &types.AttributeValueMemberS{Value: "2024-07-30T12:00:00Z"},
+			"OrderID":       &types.AttributeValueMemberS{Value: event.OrderID},
+			"OrderDateTime": &types.AttributeValueMemberS{Value: event.OrderDateTime},
 		},
 	}
 
-	result, err := svc.GetItem(context.TODO(), input)
+	result, err := svc.GetItem(ctx, input)
 	if err != nil {
-		fmt.Printf("Failed to read item: %v\n", err)
-		return
+		return nil, fmt.Errorf("failed to read item: %w", err)
 	}
 
-	fmt.Println("Item:", result.Item)
+	return result.Item, nil
+}
+
+func main() {
+	lambda.Start(handler)
 }

@@ -3,33 +3,70 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/jsii-runtime-go"
 )
 
-func main() {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	orderID := request.PathParameters["order_id"]
+
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		panic(err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: 500,
+			Body:       fmt.Sprintf("Failed to load config: %v", err),
+		}, nil
 	}
 
 	svc := dynamodb.NewFromConfig(cfg)
 
-	input := &dynamodb.DeleteItemInput{
-		TableName: jsii.String("OrdersTable"),
+	// Retrieve OrderDateTime from DynamoDB (Assuming it's needed)
+	getItemInput := &dynamodb.GetItemInput{
+		TableName: jsii.String(os.Getenv("ORDERS_TABLE")),
 		Key: map[string]types.AttributeValue{
-			"OrderID":       &types.AttributeValueMemberS{Value: "1"},
-			"OrderDateTime": &types.AttributeValueMemberS{Value: "2024-07-30T12:00:00Z"},
+			"OrderID": &types.AttributeValueMemberS{Value: orderID},
 		},
 	}
 
-	_, err = svc.DeleteItem(context.TODO(), input)
-	if err != nil {
-		fmt.Printf("Failed to delete item: %v\n", err)
-	} else {
-		fmt.Println("Successfully deleted item")
+	getItemOutput, err := svc.GetItem(ctx, getItemInput)
+	if err != nil || getItemOutput.Item == nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 404,
+			Body:       fmt.Sprintf("Order with ID %s not found", orderID),
+		}, nil
 	}
+
+	orderDateTime := getItemOutput.Item["OrderDateTime"].(*types.AttributeValueMemberS).Value
+
+	// Delete the item from DynamoDB
+	deleteItemInput := &dynamodb.DeleteItemInput{
+		TableName: jsii.String(os.Getenv("ORDERS_TABLE")),
+		Key: map[string]types.AttributeValue{
+			"OrderID":       &types.AttributeValueMemberS{Value: orderID},
+			"OrderDateTime": &types.AttributeValueMemberS{Value: orderDateTime},
+		},
+	}
+
+	_, err = svc.DeleteItem(ctx, deleteItemInput)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 500,
+			Body:       fmt.Sprintf("Failed to delete item: %v", err),
+		}, nil
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Body:       fmt.Sprintf("Successfully deleted order with ID %s", orderID),
+	}, nil
+}
+
+func main() {
+	lambda.Start(handler)
 }
