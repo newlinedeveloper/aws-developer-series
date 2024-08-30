@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigateway"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -49,26 +50,58 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	// Delete records lambda function
 	deleteOrderHandler := CreateLambdaHandler(stack, config.DeleteFunctionName, config.DeleteOrderCodePath)
 
+	// Create a Cognito User Pool
+	userPool := awscognito.NewUserPool(stack, jsii.String("MyUserPool"), &awscognito.UserPoolProps{
+		SelfSignUpEnabled: jsii.Bool(true),
+		SignInAliases:     &awscognito.SignInAliases{Email: jsii.Bool(true)},
+		AutoVerify:        &awscognito.AutoVerifiedAttrs{Email: jsii.Bool(true)},
+		PasswordPolicy: &awscognito.PasswordPolicy{
+			MinLength:        jsii.Number(8),
+			RequireLowercase: jsii.Bool(true),
+			RequireUppercase: jsii.Bool(true),
+			RequireDigits:    jsii.Bool(true),
+			RequireSymbols:   jsii.Bool(true),
+		},
+		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
+	})
+
+	_ = awscognito.NewUserPoolClient(stack, jsii.String("UserPoolClient"), &awscognito.UserPoolClientProps{
+		UserPool: userPool,
+	})
+
 	// Create API Gateway rest api.
 	restApi := awsapigateway.NewRestApi(stack, jsii.String("LambdaRestApi"), &awsapigateway.RestApiProps{
 		RestApiName: jsii.String(*stack.StackName() + "-LambdaRestApi"),
 		Description: jsii.String("AWS Developer Series REST API"),
 	})
 
+	// Cognito Authorizer
+	authorizer := awsapigateway.NewCognitoUserPoolsAuthorizer(stack, jsii.String("Authorizer"), &awsapigateway.CognitoUserPoolsAuthorizerProps{
+		CognitoUserPools: &[]awscognito.IUserPool{userPool},
+	})
+
 	ordersApi := restApi.Root().AddResource(jsii.String("orders"), nil)
 
 	// Add path resources to rest api
 	createOrderApiRes := ordersApi.AddResource(jsii.String("create"), nil)
-	createOrderApiRes.AddMethod(jsii.String("POST"), awsapigateway.NewLambdaIntegration(createOrderHandler, nil), nil)
+	createOrderApiRes.AddMethod(jsii.String("POST"), awsapigateway.NewLambdaIntegration(createOrderHandler, nil), &awsapigateway.MethodOptions{
+		Authorizer: authorizer,
+	})
 
 	readOrderApiRes := ordersApi.AddResource(jsii.String("read"), nil)
-	readOrderApiRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(readOrderHandler, nil), nil)
+	readOrderApiRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(readOrderHandler, nil), &awsapigateway.MethodOptions{
+		Authorizer: authorizer,
+	})
 
 	updateOrderApiRes := ordersApi.AddResource(jsii.String("update"), nil)
-	updateOrderApiRes.AddMethod(jsii.String("PUT"), awsapigateway.NewLambdaIntegration(updateOrderHandler, nil), nil)
+	updateOrderApiRes.AddMethod(jsii.String("PUT"), awsapigateway.NewLambdaIntegration(updateOrderHandler, nil), &awsapigateway.MethodOptions{
+		Authorizer: authorizer,
+	})
 
 	deleteOrderApiRes := ordersApi.AddResource(jsii.String("delete"), nil)
-	deleteOrderApiRes.AddMethod(jsii.String("DELETE"), awsapigateway.NewLambdaIntegration(deleteOrderHandler, nil), nil)
+	deleteOrderApiRes.AddMethod(jsii.String("DELETE"), awsapigateway.NewLambdaIntegration(deleteOrderHandler, nil), &awsapigateway.MethodOptions{
+		Authorizer: authorizer,
+	})
 
 	// Grant the Lambda function permissions to perform CRUD operations on the DynamoDB table
 	ordersTable.GrantWriteData(createOrderHandler)
