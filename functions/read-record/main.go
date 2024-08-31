@@ -2,13 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/jsii-runtime-go"
 )
+
+type Order struct {
+	OrderID       string `json:"OrderID"`
+	OrderDateTime string `json:"OrderDateTime"`
+	Product       string `json:"Product"`
+	Quantity      int    `json:"Quantity"`
+}
 
 func main() {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
@@ -32,5 +41,21 @@ func main() {
 		return
 	}
 
-	fmt.Println("Item:", result.Item)
+	// Unmarshal the result into the Order struct
+	var order Order
+	err = attributevalue.UnmarshalMap(result.Item, &order)
+	if err != nil {
+		fmt.Printf("Failed to unmarshal item: %v\n", err)
+		return
+	}
+
+	// Print the unmarshaled order in a readable format
+	prettyOrder, err := json.MarshalIndent(order, "", "  ")
+	if err != nil {
+		fmt.Printf("Failed to marshal order: %v\n", err)
+		return
+	}
+
+	fmt.Println("Order Details:")
+	fmt.Println(string(prettyOrder))
 }
