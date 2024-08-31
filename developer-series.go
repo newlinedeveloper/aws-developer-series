@@ -60,6 +60,7 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 			RequireSymbols:   jsii.Bool(true),
 		},
 		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
+		RemovalPolicy:   awscdk.RemovalPolicy_DESTROY,
 	})
 
 	_ = awscognito.NewUserPoolClient(stack, jsii.String("UserPoolClient"), &awscognito.UserPoolClientProps{
