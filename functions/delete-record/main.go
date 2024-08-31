@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -26,9 +25,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	svc := dynamodb.NewFromConfig(cfg)
 
-	// Retrieve OrderDateTime from DynamoDB (Assuming it's needed)
+	// Retrieve the item from DynamoDB
 	getItemInput := &dynamodb.GetItemInput{
-		TableName: jsii.String(os.Getenv("ORDERS_TABLE")),
+		TableName: jsii.String("OrdersTable"),
 		Key: map[string]types.AttributeValue{
 			"OrderID": &types.AttributeValueMemberS{Value: orderID},
 		},
@@ -42,14 +41,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	orderDateTime := getItemOutput.Item["OrderDateTime"].(*types.AttributeValueMemberS).Value
-
-	// Delete the item from DynamoDB
+	// Proceed to delete the item from DynamoDB
 	deleteItemInput := &dynamodb.DeleteItemInput{
-		TableName: jsii.String(os.Getenv("ORDERS_TABLE")),
+		TableName: jsii.String("OrdersTable"),
 		Key: map[string]types.AttributeValue{
-			"OrderID":       &types.AttributeValueMemberS{Value: orderID},
-			"OrderDateTime": &types.AttributeValueMemberS{Value: orderDateTime},
+			"OrderID": &types.AttributeValueMemberS{Value: orderID},
 		},
 	}
 
