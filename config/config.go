@@ -6,13 +6,13 @@ const (
 	PartitionKey            = "OrderID"
 	SortKey                 = "OrderDateTime"
 	CreateOrderFunctionName = "CreateOrder"
-	CreateOrderCodePath     = "function/insert-record/."
+	CreateOrderCodePath     = "functions/insert-record/."
 	ReadOrderFunctionName   = "ReadOrder"
-	ReadOrderCodePath       = "function/read-record/."
+	ReadOrderCodePath       = "functions/read-record/."
 	UpdateOrderFunctionName = "UpdateOrder"
-	UpdateOrderCodePath     = "function/update-record/."
+	UpdateOrderCodePath     = "functions/update-record/."
 	DeleteFunctionName      = "DeleteOrder"
-	DeleteOrderCodePath     = "function/delete-record/."
+	DeleteOrderCodePath     = "functions/delete-record/."
 	MemorySize              = 128
 	MaxDuration             = 60
 	Handler                 = "bootstrap"

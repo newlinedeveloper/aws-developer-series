@@ -19,8 +19,18 @@ The `cdk.json` file tells the CDK toolkit how to execute your app.
 ```
 aws cognito-idp sign-up \
   --client-id <user-pool-client-id> \
-  --username user@example.com \
+  --username testuser@gmail.com \
   --password 'Password123!'
+
+
+```
+
+**Admin confirms the user verification**
+
+```
+aws cognito-idp admin-confirm-sign-up \
+  --user-pool-id <user-pool-id> \
+  --username testuser@gmail.com
 
 
 ```
@@ -31,7 +41,7 @@ aws cognito-idp sign-up \
 aws cognito-idp initiate-auth \
   --client-id <user-pool-client-id> \
   --auth-flow USER_PASSWORD_AUTH \
-  --auth-parameters USERNAME=user@example.com,PASSWORD='Password123!'
+  --auth-parameters USERNAME=testuser@gmail.com,PASSWORD='Password123!'
 
 
 ```
@@ -40,5 +50,15 @@ aws cognito-idp initiate-auth \
 ```
 curl -X GET https://<api-id>.execute-api.<region>.amazonaws.com/prod/items \
 -H "Authorization: Bearer <id_token>"
+```
+
+**Create Order record payload**
+
+```
+{
+  "order_id": "1",
+  "product": "Laptop",
+  "quantity": "2"
+}
 
 ```

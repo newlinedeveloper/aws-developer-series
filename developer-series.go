@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigateway"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -28,10 +29,6 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		TableName: jsii.String(config.TableName),
 		PartitionKey: &awsdynamodb.Attribute{
 			Name: jsii.String(config.PartitionKey),
-			Type: awsdynamodb.AttributeType_STRING,
-		},
-		SortKey: &awsdynamodb.Attribute{
-			Name: jsii.String(config.SortKey),
 			Type: awsdynamodb.AttributeType_STRING,
 		},
 		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
@@ -66,7 +63,11 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	})
 
 	_ = awscognito.NewUserPoolClient(stack, jsii.String("UserPoolClient"), &awscognito.UserPoolClientProps{
-		UserPool: userPool,
+		UserPool:       userPool,
+		GenerateSecret: jsii.Bool(false), // Set to true if you want to generate a client secret
+		AuthFlows: &awscognito.AuthFlow{
+			UserPassword: jsii.Bool(true), // Enable USER_PASSWORD_AUTH flow
+		},
 	})
 
 	// Create API Gateway rest api.
@@ -80,26 +81,30 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		CognitoUserPools: &[]awscognito.IUserPool{userPool},
 	})
 
+	// Define the base resource
 	ordersApi := restApi.Root().AddResource(jsii.String("orders"), nil)
 
-	// Add path resources to rest api
+	// Define the "create" resource
 	createOrderApiRes := ordersApi.AddResource(jsii.String("create"), nil)
 	createOrderApiRes.AddMethod(jsii.String("POST"), awsapigateway.NewLambdaIntegration(createOrderHandler, nil), &awsapigateway.MethodOptions{
 		Authorizer: authorizer,
 	})
 
-	readOrderApiRes := ordersApi.AddResource(jsii.String("read"), nil)
-	readOrderApiRes.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(readOrderHandler, nil), &awsapigateway.MethodOptions{
+	// Define the "{order_id}" resource under "orders"
+	orderIdResource := ordersApi.AddResource(jsii.String("{order_id}"), nil)
+
+	// Define the GET method for the resource with path parameter
+	orderIdResource.AddMethod(jsii.String("GET"), awsapigateway.NewLambdaIntegration(readOrderHandler, nil), &awsapigateway.MethodOptions{
 		Authorizer: authorizer,
 	})
 
-	updateOrderApiRes := ordersApi.AddResource(jsii.String("update"), nil)
-	updateOrderApiRes.AddMethod(jsii.String("PUT"), awsapigateway.NewLambdaIntegration(updateOrderHandler, nil), &awsapigateway.MethodOptions{
+	// Define the PUT method for the resource with path parameter
+	orderIdResource.AddMethod(jsii.String("PUT"), awsapigateway.NewLambdaIntegration(updateOrderHandler, nil), &awsapigateway.MethodOptions{
 		Authorizer: authorizer,
 	})
 
-	deleteOrderApiRes := ordersApi.AddResource(jsii.String("delete"), nil)
-	deleteOrderApiRes.AddMethod(jsii.String("DELETE"), awsapigateway.NewLambdaIntegration(deleteOrderHandler, nil), &awsapigateway.MethodOptions{
+	// Define the DELETE method for the resource with path parameter
+	orderIdResource.AddMethod(jsii.String("DELETE"), awsapigateway.NewLambdaIntegration(deleteOrderHandler, nil), &awsapigateway.MethodOptions{
 		Authorizer: authorizer,
 	})
 
@@ -107,9 +112,22 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	ordersTable.GrantWriteData(createOrderHandler)
 	ordersTable.GrantReadData(readOrderHandler)
 	ordersTable.GrantReadWriteData(updateOrderHandler)
-	ordersTable.GrantWriteData(deleteOrderHandler)
+	ordersTable.GrantReadWriteData(deleteOrderHandler)
 
 	return stack
+}
+
+func CreateLambdaHandler(stack awscdk.Stack, functionName string, codePath string) awslambda.Function {
+	orderHandler := awslambda.NewFunction(stack, jsii.String(functionName), &awslambda.FunctionProps{
+		FunctionName: jsii.String(*stack.StackName() + "-" + functionName),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2(),
+		MemorySize:   jsii.Number(config.MemorySize),
+		Timeout:      awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String(codePath), nil),
+		Handler:      jsii.String(config.Handler),
+	})
+
+	return orderHandler
 }
 
 func main() {
