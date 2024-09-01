@@ -2,7 +2,7 @@ package config
 
 const (
 	StackName    = "DeveloperSeriesStack"
-	FunctionName = "ProcessingFunction"
+	FunctionName = "ProcessingSNSFunction"
 	MemorySize   = 128
 	MaxDuration  = 60
 	CodePath     = "function/."

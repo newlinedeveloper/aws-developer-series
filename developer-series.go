@@ -9,6 +9,8 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3notifications"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssns"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssnssubscriptions"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -29,6 +31,11 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
+	// Create SNS Topic
+	topic := awssns.NewTopic(stack, jsii.String("ProcessingTopic"), &awssns.TopicProps{
+		TopicName: jsii.String(*stack.StackName() + "-ProcessingTopic"),
+	})
+
 	// Create lambda function
 	processingLambda := awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
 		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
@@ -39,22 +46,36 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		Handler:      jsii.String(config.Handler),
 	})
 
-	// Add S3 event notification to trigger Lambda on file upload
+	// Subscribe Lambda to SNS Topic
+	topic.AddSubscription(awssnssubscriptions.NewLambdaSubscription(processingLambda, &awssnssubscriptions.LambdaSubscriptionProps{
+		FilterPolicy: &map[string]awssns.SubscriptionFilter{
+			"prefix": awssns.SubscriptionFilter_StringFilter(&awssns.StringConditions{
+				Allowlist: &[]*string{jsii.String("orders/")},
+			}),
+		},
+	}))
+
 	bucket.AddEventNotification(
 		awss3.EventType_OBJECT_CREATED,
-		awss3notifications.NewLambdaDestination(processingLambda),
+		awss3notifications.NewSnsDestination(topic),
 		&awss3.NotificationKeyFilter{
 			Prefix: jsii.String("orders/"), // Trigger only for files under 'orders' folder
 		},
 	)
 
-	// Later in your code:
-	role := processingLambda.Role()
+	// Adding the necessary S3 bucket policy for SNS publishing
+	bucket.AddToResourcePolicy(
+		awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+			Actions:   jsii.Strings("s3:PutObject"),
+			Resources: jsii.Strings(*bucket.BucketArn() + "/*"),
+			Principals: &[]awsiam.IPrincipal{
+				awsiam.NewServicePrincipal(jsii.String("sns.amazonaws.com"), nil),
+			},
+		}),
+	)
 
-	// Use role in some other context if needed, for example:
-	role.AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("AmazonS3ReadOnlyAccess")))
-
-	bucket.GrantRead(role, nil)
+	// Grant the Lambda function permissions to publish to SNS topic
+	topic.GrantPublish(processingLambda)
 
 	return stack
 }
