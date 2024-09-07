@@ -31,11 +31,6 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
-	// Create SNS Topic
-	topic := awssns.NewTopic(stack, jsii.String("ProcessingTopic"), &awssns.TopicProps{
-		TopicName: jsii.String(*stack.StackName() + "-ProcessingTopic"),
-	})
-
 	// Create lambda function
 	processingLambda := awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
 		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
@@ -46,14 +41,14 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		Handler:      jsii.String(config.Handler),
 	})
 
-	// Subscribe Lambda to SNS Topic
-	topic.AddSubscription(awssnssubscriptions.NewLambdaSubscription(processingLambda, &awssnssubscriptions.LambdaSubscriptionProps{
-		FilterPolicy: &map[string]awssns.SubscriptionFilter{
-			"prefix": awssns.SubscriptionFilter_StringFilter(&awssns.StringConditions{
-				Allowlist: &[]*string{jsii.String("orders/")},
-			}),
-		},
-	}))
+	// Create SNS Topic
+	topic := awssns.NewTopic(stack, jsii.String("FileUploadNotificationTopic"), &awssns.TopicProps{
+		TopicName: jsii.String(*stack.StackName() + "-FileUploadNotificationTopic"),
+	})
+
+	// Subscribe an email to the SNS Topic
+	// topic.AddSubscription(awssnssubscriptions.NewEmailSubscription(jsii.String("veerasolaiyappan@gmail.com"), nil))
+	topic.AddSubscription(awssnssubscriptions.NewLambdaSubscription(processingLambda, nil))
 
 	bucket.AddEventNotification(
 		awss3.EventType_OBJECT_CREATED,
