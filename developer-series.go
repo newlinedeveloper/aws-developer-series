@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3notifications"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awssns"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awssnssubscriptions"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssqs"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -46,9 +47,24 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		TopicName: jsii.String(*stack.StackName() + "-FileUploadNotificationTopic"),
 	})
 
-	// Subscribe an email to the SNS Topic
-	// topic.AddSubscription(awssnssubscriptions.NewEmailSubscription(jsii.String("veerasolaiyappan@gmail.com"), nil))
-	topic.AddSubscription(awssnssubscriptions.NewLambdaSubscription(processingLambda, nil))
+	// Create SQS Queue
+	queue := awssqs.NewQueue(stack, jsii.String("ProcessingQueue"), &awssqs.QueueProps{
+		QueueName:         jsii.String(*stack.StackName() + "-ProcessingQueue"),
+		VisibilityTimeout: awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)), // Customize as needed
+	})
+
+	// Subscribe SQS Queue to SNS Topic
+	topic.AddSubscription(awssnssubscriptions.NewSqsSubscription(queue, nil))
+
+	// Subscribe Lambda to SQS Queue via Event Source Mapping
+	awslambda.NewCfnEventSourceMapping(stack, jsii.String("SQSTrigger"), &awslambda.CfnEventSourceMappingProps{
+		BatchSize:      jsii.Number(10), // Customize the batch size
+		EventSourceArn: queue.QueueArn(),
+		FunctionName:   processingLambda.FunctionName(),
+	})
+
+	// Grant Lambda permission to consume messages from SQS
+	queue.GrantConsumeMessages(processingLambda)
 
 	bucket.AddEventNotification(
 		awss3.EventType_OBJECT_CREATED,
@@ -68,9 +84,6 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 			},
 		}),
 	)
-
-	// Grant the Lambda function permissions to publish to SNS topic
-	topic.GrantPublish(processingLambda)
 
 	return stack
 }
