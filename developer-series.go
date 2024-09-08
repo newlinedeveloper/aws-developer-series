@@ -25,8 +25,9 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 
 	// Step 1: Create a Kinesis Data Stream
 	stream := awskinesis.NewStream(stack, jsii.String("MyDataStream"), &awskinesis.StreamProps{
-		StreamName: jsii.String("my-data-stream"),
-		ShardCount: jsii.Number(1),
+		StreamName:    jsii.String("my-data-stream"),
+		ShardCount:    jsii.Number(1),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
 	// Step 2: Create lambda function
