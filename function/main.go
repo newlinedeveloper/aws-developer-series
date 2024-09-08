@@ -9,44 +9,35 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
-type S3Event struct {
-	Records []struct {
-		S3 struct {
-			Bucket struct {
-				Name string `json:"name"`
-			} `json:"bucket"`
-			Object struct {
-				Key  string `json:"key"`
-				Size int64  `json:"size"`
-			} `json:"object"`
-		} `json:"s3"`
-	} `json:"Records"`
+// S3Detail represents the S3 object information sent via EventBridge
+type S3Detail struct {
+	Bucket struct {
+		Name string `json:"name"`
+	} `json:"bucket"`
+	Object struct {
+		Key  string `json:"key"`
+		Size int64  `json:"size"`
+	} `json:"object"`
 }
 
-// Handler function to process SQS messages containing S3 events
-func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
-	fmt.Println("SQS event processing --------------")
-	for _, sqsMessage := range sqsEvent.Records {
-		// Print the raw message for debugging
-		fmt.Printf("SQS Message Body: %s\n", sqsMessage.Body)
+// Handler function to process EventBridge messages containing S3 events
+func handler(ctx context.Context, event events.CloudWatchEvent) error {
+	fmt.Println("EventBridge event received --------------")
 
-		// Unmarshal the S3 event from the SQS message body
-		var s3Event S3Event
-		err := json.Unmarshal([]byte(sqsMessage.Body), &s3Event)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal SQS message into S3 event: %v", err)
-		}
-
-		// Process each S3 event record
-		for _, s3Record := range s3Event.Records {
-			bucketName := s3Record.S3.Bucket.Name
-			objectKey := s3Record.S3.Object.Key
-			objectSize := s3Record.S3.Object.Size
-
-			// Log the details of the uploaded file
-			fmt.Printf("File uploaded: %s/%s (Size: %d bytes)\n", bucketName, objectKey, objectSize)
-		}
+	// Unmarshal the S3 event details from the EventBridge event
+	var s3Detail S3Detail
+	err := json.Unmarshal(event.Detail, &s3Detail)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal EventBridge message into S3 detail: %v", err)
 	}
+
+	// Extract bucket name, object key, and size
+	bucketName := s3Detail.Bucket.Name
+	objectKey := s3Detail.Object.Key
+	objectSize := s3Detail.Object.Size
+
+	// Log the details of the uploaded file
+	fmt.Printf("File uploaded: %s/%s (Size: %d bytes)\n", bucketName, objectKey, objectSize)
 
 	return nil
 }

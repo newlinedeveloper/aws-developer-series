@@ -5,11 +5,11 @@ import (
 	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsevents"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awseventstargets"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awss3notifications"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awssqs"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -27,12 +27,8 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 
 	// Create the S3 bucket
 	bucket := awss3.NewBucket(stack, jsii.String("ProcessingBucket"), &awss3.BucketProps{
-		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
-	})
-
-	// Create SQS queue
-	queue := awssqs.NewQueue(stack, jsii.String("ProcessingQueue"), &awssqs.QueueProps{
-		VisibilityTimeout: awscdk.Duration_Seconds(jsii.Number(300)),
+		RemovalPolicy:      awscdk.RemovalPolicy_DESTROY,
+		EventBridgeEnabled: jsii.Bool(true), // Enable EventBridge integration
 	})
 
 	// Create lambda function
@@ -45,40 +41,42 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		Handler:      jsii.String(config.Handler),
 	})
 
-	// Add S3 event notification to SQS
-	bucket.AddEventNotification(
-		awss3.EventType_OBJECT_CREATED,
-		awss3notifications.NewSqsDestination(queue),
-		&awss3.NotificationKeyFilter{
-			Prefix: jsii.String("orders/"), // Trigger only for files in 'orders' folder
-		},
-	)
-
-	// Subscribe Lambda to SQS Queue via Event Source Mapping
-	awslambda.NewCfnEventSourceMapping(stack, jsii.String("SQSTrigger"), &awslambda.CfnEventSourceMappingProps{
-		BatchSize:      jsii.Number(10), // Customize the batch size
-		EventSourceArn: queue.QueueArn(),
-		FunctionName:   processingLambda.FunctionName(),
-	})
-
-	// Grant SQS permissions for the Lambda function to read messages from the queue
-	queue.GrantConsumeMessages(processingLambda)
-
-	// Adding the necessary S3 bucket policy for SQS
-	queue.AddToResourcePolicy(
-		awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
-			Actions:   jsii.Strings("sqs:SendMessage"),
-			Resources: jsii.Strings(*queue.QueueArn()),
-			Principals: &[]awsiam.IPrincipal{
-				awsiam.NewServicePrincipal(jsii.String("s3.amazonaws.com"), nil),
-			},
-			Conditions: &map[string]interface{}{
-				"ArnLike": map[string]interface{}{
-					"aws:SourceArn": bucket.BucketArn(),
+	// Step 3: Create an EventBridge rule to capture S3 events
+	eventRule := awsevents.NewRule(stack, jsii.String("S3EventRule"), &awsevents.RuleProps{
+		EventPattern: &awsevents.EventPattern{
+			Source:     jsii.Strings("aws.s3"),
+			DetailType: jsii.Strings("Object Created"),
+			Detail: &map[string]interface{}{
+				"bucket": map[string]interface{}{
+					"name": jsii.Strings(*bucket.BucketName()), // Bucket name must be an array
+				},
+				"object": map[string]interface{}{
+					"key": map[string]interface{}{
+						"prefix": jsii.Strings("order/"), // Prefix must be an array
+					},
 				},
 			},
-		}),
-	)
+		},
+	})
+
+	// Step 4: Add Lambda function as the target for EventBridge rule
+	eventRule.AddTarget(awseventstargets.NewLambdaFunction(processingLambda, nil))
+
+	// Step 5: Add permission for EventBridge to invoke the Lambda function
+	processingLambda.AddPermission(jsii.String("AllowEventBridgeInvoke"), &awslambda.Permission{
+		Action:    jsii.String("lambda:InvokeFunction"),
+		Principal: awsiam.NewServicePrincipal(jsii.String("events.amazonaws.com"), nil),
+		SourceArn: eventRule.RuleArn(), // Allow invocation only from this rule
+	})
+
+	// Step 6: Add permissions for EventBridge to access S3 events
+	bucket.AddToResourcePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   jsii.Strings("s3:PutObject", "s3:GetObject", "s3:ListBucket"),
+		Resources: jsii.Strings(*bucket.BucketArn(), *bucket.BucketArn()+"/*"),
+		Principals: &[]awsiam.IPrincipal{
+			awsiam.NewServicePrincipal(jsii.String("events.amazonaws.com"), nil),
+		},
+	}))
 
 	return stack
 }
