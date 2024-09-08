@@ -9,8 +9,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awss3notifications"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awssns"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awssnssubscriptions"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssqs"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -31,6 +30,11 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
+	// Create SQS queue
+	queue := awssqs.NewQueue(stack, jsii.String("ProcessingQueue"), &awssqs.QueueProps{
+		VisibilityTimeout: awscdk.Duration_Seconds(jsii.Number(300)),
+	})
+
 	// Create lambda function
 	processingLambda := awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
 		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
@@ -41,36 +45,38 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		Handler:      jsii.String(config.Handler),
 	})
 
-	// Create SNS Topic
-	topic := awssns.NewTopic(stack, jsii.String("FileUploadNotificationTopic"), &awssns.TopicProps{
-		TopicName: jsii.String(*stack.StackName() + "-FileUploadNotificationTopic"),
-	})
-
-	// Subscribe an email to the SNS Topic
-	// topic.AddSubscription(awssnssubscriptions.NewEmailSubscription(jsii.String("veerasolaiyappan@gmail.com"), nil))
-	topic.AddSubscription(awssnssubscriptions.NewLambdaSubscription(processingLambda, nil))
-
+	// Add S3 event notification to SQS
 	bucket.AddEventNotification(
 		awss3.EventType_OBJECT_CREATED,
-		awss3notifications.NewSnsDestination(topic),
+		awss3notifications.NewSqsDestination(queue),
 		&awss3.NotificationKeyFilter{
-			Prefix: jsii.String("orders/"), // Trigger only for files under 'orders' folder
+			Prefix: jsii.String("orders/"), // Trigger only for files in 'orders' folder
 		},
 	)
 
-	// Adding the necessary S3 bucket policy for SNS publishing
+	// Add SQS as an event source for Lambda
+	// processingLambda.AddEventSource(&awslambda.SqsEventSource{
+	// 	Queue: queue,
+	// })
+
+	// Grant SQS permissions for the Lambda function to read messages from the queue
+	queue.GrantConsumeMessages(processingLambda)
+
+	// Add a bucket policy to allow S3 to send notifications to SQS
 	bucket.AddToResourcePolicy(
 		awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
-			Actions:   jsii.Strings("s3:PutObject"),
-			Resources: jsii.Strings(*bucket.BucketArn() + "/*"),
+			Actions:   jsii.Strings("sqs:SendMessage"),
+			Resources: jsii.Strings(*queue.QueueArn()),
 			Principals: &[]awsiam.IPrincipal{
-				awsiam.NewServicePrincipal(jsii.String("sns.amazonaws.com"), nil),
+				awsiam.NewServicePrincipal(jsii.String("s3.amazonaws.com"), nil),
+			},
+			Conditions: &map[string]interface{}{
+				"ArnLike": map[string]interface{}{
+					"aws:SourceArn": bucket.BucketArn(),
+				},
 			},
 		}),
 	)
-
-	// Grant the Lambda function permissions to publish to SNS topic
-	topic.GrantPublish(processingLambda)
 
 	return stack
 }
