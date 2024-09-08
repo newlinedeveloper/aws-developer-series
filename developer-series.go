@@ -54,10 +54,12 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		},
 	)
 
-	// Add SQS as an event source for Lambda
-	// processingLambda.AddEventSource(&awslambda.SqsEventSource{
-	// 	Queue: queue,
-	// })
+	// Subscribe Lambda to SQS Queue via Event Source Mapping
+	awslambda.NewCfnEventSourceMapping(stack, jsii.String("SQSTrigger"), &awslambda.CfnEventSourceMappingProps{
+		BatchSize:      jsii.Number(10), // Customize the batch size
+		EventSourceArn: queue.QueueArn(),
+		FunctionName:   processingLambda.FunctionName(),
+	})
 
 	// Grant SQS permissions for the Lambda function to read messages from the queue
 	queue.GrantConsumeMessages(processingLambda)
