@@ -6,6 +6,8 @@ import (
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsstepfunctions"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsstepfunctionstasks"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -22,13 +24,48 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
 	// Create lambda function
-	awslambda.NewFunction(stack, jsii.String(config.FunctionName), &awslambda.FunctionProps{
-		FunctionName: jsii.String(*stack.StackName() + "-" + config.FunctionName),
+	taskAFunc := awslambda.NewFunction(stack, jsii.String(config.TaskAFunctionName), &awslambda.FunctionProps{
+		FunctionName: jsii.String(*stack.StackName() + "-" + config.TaskAFunctionName),
 		Runtime:      awslambda.Runtime_PROVIDED_AL2(),
 		MemorySize:   jsii.Number(config.MemorySize),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)),
-		Code:         awslambda.AssetCode_FromAsset(jsii.String(config.CodePath), nil),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String(config.TaskACodePath), nil),
 		Handler:      jsii.String(config.Handler),
+	})
+
+	taskBFunc := awslambda.NewFunction(stack, jsii.String(config.TaskBFunctionName), &awslambda.FunctionProps{
+		FunctionName: jsii.String(*stack.StackName() + "-" + config.TaskBFunctionName),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2(),
+		MemorySize:   jsii.Number(config.MemorySize),
+		Timeout:      awscdk.Duration_Seconds(jsii.Number(config.MaxDuration)),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String(config.TaskBCodePath), nil),
+		Handler:      jsii.String(config.Handler),
+	})
+
+	// Step Function task for Lambda A
+	taskA := awsstepfunctionstasks.NewLambdaInvoke(stack, jsii.String("InvokeLambdaA"), &awsstepfunctionstasks.LambdaInvokeProps{
+		LambdaFunction: taskAFunc,
+		OutputPath:     jsii.String("$.Payload"),
+	})
+
+	// Step Function task for Lambda B
+	taskB := awsstepfunctionstasks.NewLambdaInvoke(stack, jsii.String("InvokeLambdaB"), &awsstepfunctionstasks.LambdaInvokeProps{
+		LambdaFunction: taskBFunc,
+		OutputPath:     jsii.String("$.Payload"),
+	})
+
+	// Define a success state that Lambda A leads to Lambda B
+	workflowChain := taskA.Next(taskB)
+
+	// Create the state machine
+	stateMachine := awsstepfunctions.NewStateMachine(stack, jsii.String("MyStateMachine"), &awsstepfunctions.StateMachineProps{
+		Definition: workflowChain,
+		Timeout:    awscdk.Duration_Minutes(jsii.Number(5)),
+	})
+
+	// Output the state machine ARN
+	awscdk.NewCfnOutput(stack, jsii.String("StateMachineARN"), &awscdk.CfnOutputProps{
+		Value: stateMachine.StateMachineArn(),
 	})
 
 	return stack
