@@ -64,8 +64,8 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	// Grant SQS permissions for the Lambda function to read messages from the queue
 	queue.GrantConsumeMessages(processingLambda)
 
-	// Add a bucket policy to allow S3 to send notifications to SQS
-	bucket.AddToResourcePolicy(
+	// Adding the necessary S3 bucket policy for SQS
+	queue.AddToResourcePolicy(
 		awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
 			Actions:   jsii.Strings("sqs:SendMessage"),
 			Resources: jsii.Strings(*queue.QueueArn()),
