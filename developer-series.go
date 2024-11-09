@@ -59,8 +59,8 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 
 	// Create the state machine
 	stateMachine := awsstepfunctions.NewStateMachine(stack, jsii.String("MyStateMachine"), &awsstepfunctions.StateMachineProps{
-		Definition: workflowChain,
-		Timeout:    awscdk.Duration_Minutes(jsii.Number(5)),
+		DefinitionBody: awsstepfunctions.DefinitionBody_FromChainable(workflowChain),
+		Timeout:        awscdk.Duration_Minutes(jsii.Number(5)),
 	})
 
 	// Output the state machine ARN
