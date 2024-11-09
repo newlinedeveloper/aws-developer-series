@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -19,20 +20,37 @@ func main() {
 
 	streamName := "my-data-stream"
 
-	// Sample data to send
-	data := []byte("Welcome to AWS Developer series")
+	// Create a batch of 100 records to send
+	var records []*kinesis.PutRecordsRequestEntry
 
-	// Put the record into the Kinesis stream
-	_, err := svc.PutRecord(&kinesis.PutRecordInput{
-		Data:         data,
-		PartitionKey: aws.String("partitionKey-1"), // Partition key
-		StreamName:   aws.String(streamName),
+	for i := 1; i <= 200; i++ {
+		// Create a record
+		data := []byte("Message " + strconv.Itoa(i) + ": Welcome to AWS Developer series")
+
+		record := &kinesis.PutRecordsRequestEntry{
+			Data:         data,
+			PartitionKey: aws.String("partitionKey-" + strconv.Itoa(i)),
+		}
+
+		// Add the record to the batch
+		records = append(records, record)
+	}
+
+	// Send the batch to Kinesis using PutRecords
+	result, err := svc.PutRecords(&kinesis.PutRecordsInput{
+		Records:    records,
+		StreamName: aws.String(streamName),
 	})
 
 	if err != nil {
-		fmt.Println("Error putting data to stream:", err)
+		fmt.Println("Error putting batch data to stream:", err)
 		return
 	}
 
-	fmt.Println("Successfully sent data to stream!")
+	// Check if there are any failed records
+	if *result.FailedRecordCount > 0 {
+		fmt.Printf("Failed to put %d records to the stream\n", *result.FailedRecordCount)
+	} else {
+		fmt.Println("Successfully sent all records to stream!")
+	}
 }
