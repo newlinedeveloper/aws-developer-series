@@ -63,7 +63,7 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 		RemovalPolicy:   awscdk.RemovalPolicy_DESTROY,
 	})
 
-	_ = awscognito.NewUserPoolClient(stack, jsii.String("UserPoolClient"), &awscognito.UserPoolClientProps{
+	userPoolClient := awscognito.NewUserPoolClient(stack, jsii.String("UserPoolClient"), &awscognito.UserPoolClientProps{
 		UserPool:       userPool,
 		GenerateSecret: jsii.Bool(false), // Set to true if you want to generate a client secret
 		AuthFlows: &awscognito.AuthFlow{
@@ -114,6 +114,20 @@ func NewDeveloperSeriesStack(scope constructs.Construct, id string, props *Devel
 	ordersTable.GrantReadData(readOrderHandler)
 	ordersTable.GrantReadWriteData(updateOrderHandler)
 	ordersTable.GrantReadWriteData(deleteOrderHandler)
+
+	// Output the User Pool ID
+	awscdk.NewCfnOutput(stack, jsii.String("UserPoolIdOutput"), &awscdk.CfnOutputProps{
+		Value:       userPool.UserPoolId(),
+		Description: jsii.String("The ID of the Cognito User Pool"),
+		ExportName:  jsii.String("UserPoolId"),
+	})
+
+	// Output the User Pool Client ID
+	awscdk.NewCfnOutput(stack, jsii.String("UserPoolClientIdOutput"), &awscdk.CfnOutputProps{
+		Value:       userPoolClient.UserPoolClientId(),
+		Description: jsii.String("The ID of the Cognito User Pool Client"),
+		ExportName:  jsii.String("UserPoolClientId"),
+	})
 
 	return stack
 }
